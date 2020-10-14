@@ -1,4 +1,4 @@
-const cronParser = require('@huanglipang/cron-parser');
+const cronParser = require("@huanglipang/cron-parser");
 
 let timeZone = "America/New_York";
 
@@ -55,7 +55,7 @@ let timer = undefined;
 const privacyPolicy = {
     "app-specific": {},
     "sensor-specific": {},
-    "app-sensor": {}
+    "app-sensor": {},
 };
 
 // intervalRule stores the blocked sensor-app mapping within this minute.
@@ -70,7 +70,11 @@ const privacyPolicy = {
 //         }
 //     }
 // }
-let intervalRule = {};
+let intervalRule = {
+    "app-specific": {},
+    "sensor-specific": [],
+    "app-sensor": {},
+};
 
 /**
  * This function compiles the cron like policy and return a CronDate object pointer.
@@ -80,9 +84,9 @@ let intervalRule = {};
  */
 function compilePolicyToIntervals(policy, currentDate) {
     const options = {
-        "currentDate": currentDate,
-        "tz": timeZone
-    }
+        currentDate: currentDate,
+        tz: timeZone,
+    };
     return cronParser.parseExpression(policy["cron"], options);
 }
 
@@ -119,23 +123,23 @@ function getUpdateRuleMaterial(sensorPolicy, now) {
  * @param {...string} restkeys - sensorId, gatewayIp
  */
 function updateIntervalRule(blockTarget, intervalRuleType, key1, ...restKeys) {
-    if(!key1) {
+    if (!key1) {
         // sensor-specific goes here
         // push blockTarget to inerval policy
         intervalRuleType.push(blockTarget);
-    } else if(restKeys.length === 0) {
-        if(!intervalRuleType.hasOwnProperty(key1)) {
+    } else if (restKeys.length === 0) {
+        if (!intervalRuleType.hasOwnProperty(key1)) {
             intervalRuleType[key1] = [];
         }
-        if(!intervalRuleType[key1].includes(blockTarget)) {
+        if (!intervalRuleType[key1].includes(blockTarget)) {
             // push blockTarget to inerval policy
             intervalRuleType[key1].push(blockTarget);
         }
     } else {
-        if(!intervalRuleType.hasOwnProperty(key1)) {
+        if (!intervalRuleType.hasOwnProperty(key1)) {
             intervalRuleType[key1] = {};
         }
-        updateIntervalRule(blockTarget, intervalRuleType[key1], ...restKeys)
+        updateIntervalRule(blockTarget, intervalRuleType[key1], ...restKeys);
     }
 }
 
@@ -148,14 +152,31 @@ function updateIntervalRule(blockTarget, intervalRuleType, key1, ...restKeys) {
  * @param {string} key1 - nested policy keys (sensorId, gatewayIp)
  * @param {...string} restkeys - sensorId, gatewayIp
  */
-function updateRuleProcedure(isInInterval, block, blockTarget, intervalRuleType, key1, ...restKeys) {
-    if(isInInterval) {
-        if(block) {
-            updateIntervalRule(blockTarget, intervalRuleType, key1, ...restKeys);
+function updateRuleProcedure(
+    isInInterval,
+    block,
+    blockTarget,
+    intervalRuleType,
+    key1,
+    ...restKeys
+) {
+    if (isInInterval) {
+        if (block) {
+            updateIntervalRule(
+                blockTarget,
+                intervalRuleType,
+                key1,
+                ...restKeys
+            );
         }
     } else {
-        if(!block) {
-            updateIntervalRule(blockTarget, intervalRuleType, key1, ...restKeys);
+        if (!block) {
+            updateIntervalRule(
+                blockTarget,
+                intervalRuleType,
+                key1,
+                ...restKeys
+            );
         }
     }
 }
@@ -168,7 +189,7 @@ function updateRuleProcedure(isInInterval, block, blockTarget, intervalRuleType,
 function updateRuleTime(tempNextRuleTime) {
     // if orgNextUpdateTime is undefined or
     // compare the nearest time with orgNextUpdateTime
-    if(!nextRuleTime || tempNextRuleTime.getTime() < nextRuleTime.getTime()) {
+    if (!nextRuleTime || tempNextRuleTime.getTime() < nextRuleTime.getTime()) {
         nextRuleTime = tempNextRuleTime;
     }
 }
@@ -180,10 +201,18 @@ function updateRuleTime(tempNextRuleTime) {
 function updateRuleBySensorSpecificPolicy(now) {
     const type = `sensor-specific`;
     const sensorIds = privacyPolicy[type];
-    for(const sensorId in sensorIds) {
+    for (const sensorId in sensorIds) {
         const sensorPolicy = sensorIds[sensorId];
-        const [intervals, updateTime] = getUpdateRuleMaterial(sensorPolicy, now);
-        updateRuleProcedure(intervals.isInInterval(now), sensorPolicy["block"], sensorId, intervalRule[type]);
+        const [intervals, updateTime] = getUpdateRuleMaterial(
+            sensorPolicy,
+            now
+        );
+        updateRuleProcedure(
+            intervals.isInInterval(now),
+            sensorPolicy["block"],
+            sensorId,
+            intervalRule[type]
+        );
         updateRuleTime(updateTime);
     }
 }
@@ -195,12 +224,21 @@ function updateRuleBySensorSpecificPolicy(now) {
 function updateRuleByAppSpecificPolicy(now) {
     const type = `app-specific`;
     const gatewayIps = privacyPolicy[type];
-    for(const gatewayIp in gatewayIps) {
+    for (const gatewayIp in gatewayIps) {
         const topics = gatewayIps[gatewayIp];
-        for(const topic in topics) {
+        for (const topic in topics) {
             const sensorPolicy = topics[topic];
-            const [intervals, updateTime] = getUpdateRuleMaterial(sensorPolicy, now);
-            updateRuleProcedure(intervals.isInInterval(now), sensorPolicy["block"], topic, intervalRule[type], gatewayIp);
+            const [intervals, updateTime] = getUpdateRuleMaterial(
+                sensorPolicy,
+                now
+            );
+            updateRuleProcedure(
+                intervals.isInInterval(now),
+                sensorPolicy["block"],
+                topic,
+                intervalRule[type],
+                gatewayIp
+            );
             updateRuleTime(updateTime);
         }
     }
@@ -213,26 +251,32 @@ function updateRuleByAppSpecificPolicy(now) {
 function updateRuleByAppSensorPolicy(now) {
     const type = `app-sensor`;
     const sensorIds = privacyPolicy[type];
-    for(const sensorId in sensorIds) {
-        if(intervalRule["sensor-specific"].includes(sensorId)) {
+    for (const sensorId in sensorIds) {
+        if (intervalRule["sensor-specific"].includes(sensorId)) {
             continue;
         }
         const gatewayIps = sensorIds[sensorId];
-        for(const gatewayIp in gatewayIps) {
+        for (const gatewayIp in gatewayIps) {
             const topics = gatewayIps[gatewayIp];
-            for(const topic in topics) {
-                if(intervalRule["app-specific"][gatewayIp] &&
-                   intervalRule["app-specific"][gatewayIp].includes(topic)) {
+            for (const topic in topics) {
+                if (
+                    intervalRule["app-specific"][gatewayIp] &&
+                    intervalRule["app-specific"][gatewayIp].includes(topic)
+                ) {
                     continue;
                 }
                 const sensorPolicy = topics[topic];
-                const [intervals, updateTime] = getUpdateRuleMaterial(sensorPolicy, now);
+                const [intervals, updateTime] = getUpdateRuleMaterial(
+                    sensorPolicy,
+                    now
+                );
                 updateRuleProcedure(
                     intervals.isInInterval(now),
                     sensorPolicy["block"],
                     topic,
                     intervalRule[type],
-                    sensorId, gatewayIp
+                    sensorId,
+                    gatewayIp
                 );
                 updateRuleTime(updateTime);
             }
@@ -248,13 +292,15 @@ function updateRuleJob() {
     intervalRule = {
         "sensor-specific": [],
         "app-specific": {},
-        "app-sensor": {}
+        "app-sensor": {},
     };
     nextRuleTime = undefined;
     updateRuleBySensorSpecificPolicy(now);
     updateRuleByAppSpecificPolicy(now);
     updateRuleByAppSensorPolicy(now);
-    console.log(`[INFO] Updated interval policy: ${JSON.stringify(intervalRule)}`);
+    console.log(
+        `[INFO] Updated interval policy: ${JSON.stringify(intervalRule)}`
+    );
 }
 
 /**
@@ -263,15 +309,17 @@ function updateRuleJob() {
  */
 function updateTimer() {
     // check if next interval exists
-    if(nextRuleTime) {
-        if(timer) {
+    if (nextRuleTime) {
+        if (timer) {
             // clear setTimeout when update policy
             clearTimeout(timer);
         }
         const now = new Date();
         // calculate the interval for next execution
         const interval = getTimeDifference(nextRuleTime, now);
-        console.log(`[INFO] Next update time: ${nextRuleTime}, interval: ${interval}`);
+        console.log(
+            `[INFO] Next update time: ${nextRuleTime}, interval: ${interval}`
+        );
         timer = setTimeout(() => {
             ruleTimerJob();
         }, interval);
@@ -299,35 +347,40 @@ function setTimeZone(tz) {
  * @param {Object} policy
  */
 function updatePolicy(policy) {
-    for(const type in policy) {
-        if(type === "app-sensor") {
+    for (const type in policy) {
+        if (type === "app-sensor") {
             const sensorIds = policy[type];
-            for(const sensorId in sensorIds) {
+            for (const sensorId in sensorIds) {
                 const gatewayIps = sensorIds[sensorId];
-                for(const gatewayIp in gatewayIps) {
-                    const topics = gatewayIps[gatewayIp]
-                    for(const topic in topics) {
-                        if(!privacyPolicy[type].hasOwnProperty(sensorId)) {
+                for (const gatewayIp in gatewayIps) {
+                    const topics = gatewayIps[gatewayIp];
+                    for (const topic in topics) {
+                        if (!privacyPolicy[type].hasOwnProperty(sensorId)) {
                             privacyPolicy[type][sensorId] = {};
                         }
-                        if(!privacyPolicy[type][sensorId].hasOwnProperty(gatewayIp)) {
+                        if (
+                            !privacyPolicy[type][sensorId].hasOwnProperty(
+                                gatewayIp
+                            )
+                        ) {
                             privacyPolicy[type][sensorId][gatewayIp] = {};
                         }
-                        privacyPolicy[type][sensorId][gatewayIp][topic] = topics[topic];
+                        privacyPolicy[type][sensorId][gatewayIp][topic] =
+                            topics[topic];
                     }
                 }
             }
-        } else if(type === "sensor-specific") {
+        } else if (type === "sensor-specific") {
             const sensorIds = policy[type];
-            for(const sensorId in sensorIds) {
+            for (const sensorId in sensorIds) {
                 privacyPolicy[type][sensorId] = sensorIds[sensorId];
             }
-        } else if(type === "app-specific") {
+        } else if (type === "app-specific") {
             const gatewayIps = policy[type];
-            for(const gatewayIp in gatewayIps) {
-                const topics = gatewayIps[gatewayIp]
-                for(const topic in topics) {
-                    if(!privacyPolicy[type].hasOwnProperty(gatewayIp)) {
+            for (const gatewayIp in gatewayIps) {
+                const topics = gatewayIps[gatewayIp];
+                for (const topic in topics) {
+                    if (!privacyPolicy[type].hasOwnProperty(gatewayIp)) {
                         privacyPolicy[type][gatewayIp] = {};
                     }
                     privacyPolicy[type][gatewayIp][topic] = topics[topic];
@@ -347,17 +400,25 @@ function clearEmptyPolicy() {
         if (type === "app-sensor") {
             for (const sensor in privacyPolicy["app-sensor"]) {
                 for (const gateway in privacyPolicy["app-sensor"][sensor]) {
-                    for (const topic in privacyPolicy["app-sensor"][sensor][gateway]) {
+                    for (const topic in privacyPolicy["app-sensor"][sensor][
+                        gateway
+                    ]) {
                         if (
                             !Object.keys(
-                                privacyPolicy["app-sensor"][sensor][gateway][topic]
+                                privacyPolicy["app-sensor"][sensor][gateway][
+                                    topic
+                                ]
                             ).length
                         ) {
-                            delete privacyPolicy["app-sensor"][sensor][gateway][topic];
+                            delete privacyPolicy["app-sensor"][sensor][gateway][
+                                topic
+                            ];
                         }
                     }
                     if (
-                        !Object.keys(privacyPolicy["app-sensor"][sensor][gateway]).length
+                        !Object.keys(
+                            privacyPolicy["app-sensor"][sensor][gateway]
+                        ).length
                     ) {
                         delete privacyPolicy["app-sensor"][sensor][gateway];
                     }
@@ -368,7 +429,10 @@ function clearEmptyPolicy() {
             }
         } else if (type === "sensor-specific") {
             for (const sensor in privacyPolicy["sensor-specific"]) {
-                if (!Object.keys(privacyPolicy["sensor-specific"][sensor]).length) {
+                if (
+                    !Object.keys(privacyPolicy["sensor-specific"][sensor])
+                        .length
+                ) {
                     delete privacyPolicy["sensor-specific"][sensor];
                 }
             }
@@ -376,12 +440,16 @@ function clearEmptyPolicy() {
             for (const sensor in privacyPolicy["app-specific"]) {
                 for (const gateway in privacyPolicy["app-specific"][sensor]) {
                     if (
-                        !Object.keys(privacyPolicy["app-specific"][sensor][gateway]).length
+                        !Object.keys(
+                            privacyPolicy["app-specific"][sensor][gateway]
+                        ).length
                     ) {
                         delete privacyPolicy["app-specific"][sensor][gateway];
                     }
                 }
-                if (!Object.keys(privacyPolicy["app-specific"][sensor]).length) {
+                if (
+                    !Object.keys(privacyPolicy["app-specific"][sensor]).length
+                ) {
                     delete privacyPolicy["app-specific"][sensor];
                 }
             }
@@ -397,16 +465,20 @@ function clearEmptyPolicy() {
  * @returns {bool} - if the sensor is blocked
  */
 function isBlocked(sensorId, ip, topic) {
-    if(intervalRule["sensor-specific"].includes(sensorId)) {
+    if (intervalRule["sensor-specific"].includes(sensorId)) {
         return true;
     }
-    if(intervalRule["app-specific"][ip] &&
-       intervalRule["app-specific"][ip].includes(topic)) {
+    if (
+        intervalRule["app-specific"][ip] &&
+        intervalRule["app-specific"][ip].includes(topic)
+    ) {
         return true;
     }
-    if(intervalRule["app-sensor"][sensorId] &&
-       intervalRule["app-sensor"][sensorId][ip] &&
-       intervalRule["app-sensor"][sensorId][ip].includes(topic)) {
+    if (
+        intervalRule["app-sensor"][sensorId] &&
+        intervalRule["app-sensor"][sensorId][ip] &&
+        intervalRule["app-sensor"][sensorId][ip].includes(topic)
+    ) {
         return true;
     }
     return false;
@@ -434,5 +506,5 @@ module.exports = {
     isBlocked: isBlocked,
     update: updatePolicy,
     setTimeZone: setTimeZone,
-    startRuleTimer: ruleTimerJob
-}
+    startRuleTimer: ruleTimerJob,
+};

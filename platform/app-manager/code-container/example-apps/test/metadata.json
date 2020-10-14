@@ -1,0 +1,5 @@
+{
+    "deviceMapping": {
+        "172.26.149.165": ["sensor0", "sensor1", "sensor2"]
+    }
+}

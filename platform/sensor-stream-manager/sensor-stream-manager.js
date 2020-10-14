@@ -146,7 +146,7 @@ function subscribeToGatewayData(client) {
 function routeSensorStreamsToApps(client) {
     client.on("message", (topic, message) => {
         const payload = JSON.parse(message.toString());
-        const sensorId = payload["device_id"];
+        const sensorId = payload["_meta"]["device_id"];
         if (sensorId in sensorStreamRouteTable) {
             for (const gatewayIp in sensorStreamRouteTable[sensorId]) {
                 const topics = sensorStreamRouteTable[sensorId][gatewayIp];
